@@ -130,6 +130,8 @@ def main():
 
         ret, img = video.read()
 
+        img = cv2.flip(img[...,::-1],-1) #converts from BGR to RGB and flips image
+
         auto_throttle = float(response.get("auto_throttle", speed))
         auto_steering = float(response.get("auto_steering", 1.0))
 
