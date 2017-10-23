@@ -31,7 +31,7 @@ from mavros_msgs.msg import ActuatorControl
 
 #### CAPTURE ####################################
 from capture_3cameras.msg import Status
-from web_client.msg import Control
+from web_client.msg import Control as WebControl
 
 ####### CAPTURE ############################
 def set_video_size(video, size):
@@ -104,7 +104,7 @@ class KiwiBot:
         self._webclient_topic = webclient_topic
 
         self._mavros_subcriber = rospy.Subscriber(self._mavros_topic, ActuatorControl, self.callback_fn,  queue_size = queue)
-        self._webclient_subcriber = rospy.Subscriber(self._webclient_topic, Control, self.callback_fn2,  queue_size = queue)
+        self._webclient_subcriber = rospy.Subscriber(self._webclient_topic, WebControl, self.callback_fn2,  queue_size = queue)
 
         self._cameras_config_subcriber = rospy.Subscriber('local_client/camera_config', String, self.callback_fn3, queue_size=queue)
 
@@ -209,7 +209,7 @@ def main():
     ### Node Params #######
     quality = 80
     size = (480/1,640/1)
-    rate = 20 #args.rate
+    rate = 100 #args.rate
     speed = 0.33 #args.speed
 
     date = time.strftime("%d-%m-%y")
@@ -280,6 +280,7 @@ def main():
 
     while not rospy.is_shutdown():
 
+        loop_start = time.time()
 
         ############# CAPTURING #########################
 
@@ -357,7 +358,12 @@ def main():
                             skynet_pub.publish(True)
 
                         else:
+                            start_inference = time.time()
                             predictions = model.predict(image=[img])
+                            inference_time = time.time() - start_inference
+
+                            print("Inference time: {}".format(inference_time))
+
                             steer_msg.speed = auto_throttle
                             steer_msg.turn = predictions[0,0]*auto_steering
 
@@ -395,6 +401,8 @@ def main():
         ##################################-------------################################################
 
         r.sleep()
+        total_fps = 1/(time.time() - loop_start)
+        print("Total fps: {}".format(total_fps))
 
 if __name__ == '__main__':
     try:
