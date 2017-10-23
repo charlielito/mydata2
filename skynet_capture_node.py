@@ -282,9 +282,10 @@ def main():
 
         loop_start = time.time()
 
+        autonomous = rospy.get_param('/rover_teleop/mode') == "auto"
         ############# CAPTURING #########################
 
-        if bot.capturing:
+        if bot.capturing and not autonomous:
 
             start_time = time.time()
 
@@ -326,10 +327,8 @@ def main():
 
             send_camera = response.get("send_camera", "false") == "true"
 
-            autonomous = rospy.get_param('/rover_teleop/mode')
-
             # Check autonomous to turn on Neural Net
-            if autonomous == "auto":
+            if autonomous:
                 _, img = videos[bot.center_camera_num].read()
 
                 if img is not None:
