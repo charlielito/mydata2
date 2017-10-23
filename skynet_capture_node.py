@@ -314,16 +314,10 @@ def main():
             print("Not capturing")
             msg.fps = 0
             msg.recording = False
-            msg, image = test_capture(videos[bot.left_camera_num], videos[bot.center_camera_num], videos[bot.right_camera_num], msg)
-
-
-            ###################################### ###########################
 
             ########################## SKYNET NODE #########################################
 
             response = client._ws_client.get_data()
-
-            img = image[...,::-1] #converts from BGR to RGB
 
             auto_throttle = float(response.get("auto_throttle", speed))
             auto_steering = float(response.get("auto_steering", 1.0))
@@ -334,6 +328,49 @@ def main():
 
             autonomous = rospy.get_param('/rover_teleop/mode')
 
+            # Check autonomous to turn on Neural Net
+            if autonomous == "auto":
+                _, img = videos[bot.center_camera_num].read()
+
+                if img is not None:
+                    img = img[...,::-1] #converts from BGR to RGB
+                    img = utils.crop_image(img, params)
+
+                    if model is None:
+                        print("Loading Model...")
+                        model = init_model()
+                        print("Model Loaded!")
+                        # Publish that Network is ready!
+                        skynet_pub.publish(True)
+
+                    else:
+                        start_inference = time.time()
+
+                        predictions = model.predict(image=[img])
+                        inference_time = time.time() - start_inference
+
+                        print("Inference time: {}".format(inference_time))
+
+                        steer_msg.speed = auto_throttle
+                        steer_msg.turn = predictions[0,0]*auto_steering
+
+                        # Publish data to Local Front and Main Controler
+                        client._ws_client.emit(steering=steer_msg.turn)
+                        client._steer_publisher.publish(steer_msg)
+            else:
+                msg, img = test_capture(videos[bot.left_camera_num], videos[bot.center_camera_num], videos[bot.right_camera_num], msg)
+
+            # Send camera image to local front
+            if send_camera:
+                if time.time()-time_counter >= 3 and img is not None:
+                    _, buff = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                    print("Sending image...")
+                    response = client._ws_client.emit(image=base64.b64encode(buff))
+                    time_counter = time.time()
+            else:
+                time_counter = time.time()
+
+            ### Change of Neural Net
             if "network_branch" in response:
                 try:
                     skynet_pub.publish(False)
@@ -341,51 +378,7 @@ def main():
                     rospy.signal_shutdown("Changing AI")
                 except Exception as e:
                     print(e)
-
-
-            if img is not None:
-
-                    # print(np.ndarray.mean(img))
-                    img = utils.crop_image(img, params)
-
-                    if autonomous == "auto":
-
-                        if model is None:
-                            print("Loading Model...")
-                            model = init_model()
-                            print("Model Loaded!")
-                            # Publish that Network is ready!
-                            skynet_pub.publish(True)
-
-                        else:
-                            start_inference = time.time()
-                            predictions = model.predict(image=[img])
-                            inference_time = time.time() - start_inference
-
-                            print("Inference time: {}".format(inference_time))
-
-                            steer_msg.speed = auto_throttle
-                            steer_msg.turn = predictions[0,0]*auto_steering
-
-                            # Publish data to Local Front and Main Controler
-                            client._ws_client.emit(steering=steer_msg.turn)
-                            client._steer_publisher.publish(steer_msg)
-
-
-            if send_camera:
-
-                if time.time()-time_counter >= 3 and img is not None:
-                    _, buff = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, quality])
-                    print("Sending image...")
-                    response = client._ws_client.emit(image=base64.b64encode(buff))
-                    time_counter = time.time()
-
-            else:
-                time_counter = time.time()
-
             ########################################################################################
-
-
 
 
         ##### DATA CAPTURE ########################
@@ -396,8 +389,6 @@ def main():
             time_counter2 = time.time()
 
         publisher.publish(msg)
-
-
         ##################################-------------################################################
 
         r.sleep()
