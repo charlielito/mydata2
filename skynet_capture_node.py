@@ -33,69 +33,69 @@ from mavros_msgs.msg import ActuatorControl
 from capture_3cameras.msg import Status
 from web_client.msg import Control
 
- ####### CAPTURE ############################
- def set_video_size(video, size):
-     video.set(cv2.CAP_PROP_FRAME_HEIGHT, size[0])
-     video.set(cv2.CAP_PROP_FRAME_WIDTH, size[1])
+####### CAPTURE ############################
+def set_video_size(video, size):
+    video.set(cv2.CAP_PROP_FRAME_HEIGHT, size[0])
+    video.set(cv2.CAP_PROP_FRAME_WIDTH, size[1])
 
- def space_left(device_path, percentage = True):
-     disk = os.statvfs(device_path)
-     totalBytes = float(disk.f_bsize*disk.f_blocks)
-     totalAvailSpace = float(disk.f_bsize*disk.f_bfree)
-     if percentage:
-         return totalAvailSpace/totalBytes * 100
-     else:
-         return totalAvailSpace/1024/1024/1024
+def space_left(device_path, percentage = True):
+    disk = os.statvfs(device_path)
+    totalBytes = float(disk.f_bsize*disk.f_blocks)
+    totalAvailSpace = float(disk.f_bsize*disk.f_bfree)
+    if percentage:
+        return totalAvailSpace/totalBytes * 100
+    else:
+        return totalAvailSpace/1024/1024/1024
 
- def test_capture(video0, video1, video2, msg):
-     ret, frame0 = video0.read()
-     ret, frame1 = video1.read()
-     ret, frame2 = video2.read()
+def test_capture(video0, video1, video2, msg):
+    ret, frame0 = video0.read()
+    ret, frame1 = video1.read()
+    ret, frame2 = video2.read()
 
-     assert frame0 is not None, "device on /dev/video0 is not beeing recognized"
-     assert frame1 is not None, "device on /dev/video1 is not beeing recognized"
-     assert frame2 is not None, "device on /dev/video2 is not beeing recognized"
+    assert frame0 is not None, "device on /dev/video0 is not beeing recognized"
+    assert frame1 is not None, "device on /dev/video1 is not beeing recognized"
+    assert frame2 is not None, "device on /dev/video2 is not beeing recognized"
 
-     msg.left_camera_mean = np.ndarray.mean(frame0)
-     msg.center_camera_mean = np.ndarray.mean(frame1)
-     msg.right_camera_mean = np.ndarray.mean(frame2)
+    msg.left_camera_mean = np.ndarray.mean(frame0)
+    msg.center_camera_mean = np.ndarray.mean(frame1)
+    msg.right_camera_mean = np.ndarray.mean(frame2)
 
-     return msg, cv2.flip(frame1,-1)
-
-
- def capture_write(video0, video1, video2, dest, quality):
-     ret, frame0 = video0.read()
-     ret, frame1 = video1.read()
-     ret, frame2 = video2.read()
-
-     assert frame0 is not None, "device on /dev/video0 is not beeing recognized"
-     assert frame1 is not None, "device on /dev/video1 is not beeing recognized"
-     assert frame2 is not None, "device on /dev/video2 is not beeing recognized"
-
-     timestamp = int (time.time() * 1000)
-     prefix = binascii.b2a_hex(os.urandom(2))
-     name_l = '{}-{}_{}.jpg'.format(prefix, timestamp, "l")
-     name_c = '{}-{}_{}.jpg'.format(prefix, timestamp, "c")
-     name_r = '{}-{}_{}.jpg'.format(prefix, timestamp, "r")
-     frame1 = cv2.flip(frame1,-1)
-     cv2.imwrite(os.path.join(dest, name_l),cv2.flip(frame0,-1), [cv2.IMWRITE_JPEG_QUALITY, quality])
-     cv2.imwrite(os.path.join(dest, name_c),frame1, [cv2.IMWRITE_JPEG_QUALITY, quality])
-     cv2.imwrite(os.path.join(dest, name_r),cv2.flip(frame2,-1), [cv2.IMWRITE_JPEG_QUALITY, quality])
-
-     return timestamp, name_l, name_c, name_r, frame1
+    return msg, cv2.flip(frame1,-1)
 
 
- def create_status_msg(size=(480,640),quality=80, device="/media"):
-     msg = Status()
-     msg.quality = quality
-     msg.resolution = str(size[0])+"x"+str(size[1])
-     msg.space_left = space_left(device_path=device, percentage = True)
-     msg.fps = 0
-     msg.recording = False
-     msg.left_camera_mean = -1
-     msg.center_camera_mean = -1
-     msg.right_camera_mean = -1
-     return msg
+def capture_write(video0, video1, video2, dest, quality):
+    ret, frame0 = video0.read()
+    ret, frame1 = video1.read()
+    ret, frame2 = video2.read()
+
+    assert frame0 is not None, "device on /dev/video0 is not beeing recognized"
+    assert frame1 is not None, "device on /dev/video1 is not beeing recognized"
+    assert frame2 is not None, "device on /dev/video2 is not beeing recognized"
+
+    timestamp = int (time.time() * 1000)
+    prefix = binascii.b2a_hex(os.urandom(2))
+    name_l = '{}-{}_{}.jpg'.format(prefix, timestamp, "l")
+    name_c = '{}-{}_{}.jpg'.format(prefix, timestamp, "c")
+    name_r = '{}-{}_{}.jpg'.format(prefix, timestamp, "r")
+    frame1 = cv2.flip(frame1,-1)
+    cv2.imwrite(os.path.join(dest, name_l),cv2.flip(frame0,-1), [cv2.IMWRITE_JPEG_QUALITY, quality])
+    cv2.imwrite(os.path.join(dest, name_c),frame1, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    cv2.imwrite(os.path.join(dest, name_r),cv2.flip(frame2,-1), [cv2.IMWRITE_JPEG_QUALITY, quality])
+
+    return timestamp, name_l, name_c, name_r, frame1
+
+
+def create_status_msg(size=(480,640),quality=80, device="/media"):
+    msg = Status()
+    msg.quality = quality
+    msg.resolution = str(size[0])+"x"+str(size[1])
+    msg.space_left = space_left(device_path=device, percentage = True)
+    msg.fps = 0
+    msg.recording = False
+    msg.left_camera_mean = -1
+    msg.center_camera_mean = -1
+    msg.right_camera_mean = -1
+    return msg
 
 
 class KiwiBot:
