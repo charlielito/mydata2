@@ -260,7 +260,7 @@ def main():
 
     rospy.on_shutdown(fn)
 
-    msg = Control()
+    steer_msg = Control()
 
 
     ###### Create data.csv headers if it not exists
@@ -358,12 +358,12 @@ def main():
 
                         else:
                             predictions = model.predict(image=[img])
-                            msg.speed = auto_throttle
-                            msg.turn = predictions[0,0]*auto_steering
+                            steer_msg.speed = auto_throttle
+                            steer_msg.turn = predictions[0,0]*auto_steering
 
                             # Publish data to Local Front and Main Controler
-                            client._ws_client.emit(steering=msg.turn)
-                            client._steer_publisher.publish(msg)
+                            client._ws_client.emit(steering=steer_msg.turn)
+                            client._steer_publisher.publish(steer_msg)
 
 
             if send_camera:
