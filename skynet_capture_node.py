@@ -400,8 +400,8 @@ def main():
 
             # Send camera image to local front
             if send_camera:
-                if time.time()-time_counter >= 3 and img is not None:
-                    _, buff = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                if time.time()-time_counter >= 3 and image is not None:
+                    _, buff = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, quality])
                     print("Sending image...")
                     client._ws_client.emit(image=base64.b64encode(buff))
 
