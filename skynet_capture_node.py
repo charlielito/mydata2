@@ -14,7 +14,7 @@ import time, random, cv2, math, subprocess, csv, binascii
 import tensorflow as tf
 import cytoolz as cz
 import numpy as np
-import rospy, base64, argparse
+import rospy, base64, argparse, requests, json
 
 from model import Model
 from model import get_templates
@@ -30,7 +30,7 @@ from mavros_msgs.msg import ActuatorControl
 
 
 #### CAPTURE ####################################
-from capture_3cameras.msg import Status
+from skynet.msg import Status
 from web_client.msg import Control as WebControl
 
 ####### CAPTURE ############################
@@ -181,7 +181,30 @@ class WsSkynetClient:
 
         self._steer_publisher = rospy.Publisher(self._steer_topic, Control, queue_size=queue)
 
-########################################################
+######################################################################
+
+########### OBJECT API FUN ###########################################
+UPLOAD_URL = 'http://vision.kiwicampus.com/api/v2/upload/'
+'''
+UPLOAD_URL: host of api
+image_buffer: jpg buffer array of image
+returns: dictionary of bounding boxes and detections
+'''
+def call_object_detection_api(UPLOAD_URL, image_buffer):
+
+        headers = {'Accept': 'application/json'}
+        files = {'file': image_buffer.tostring()  }
+
+        r = requests.post(UPLOAD_URL, files = files, headers = headers)
+
+        print('Status code of the response: ')
+        print(r.status_code)
+
+        response = r.json() #returns a dicto: detections, meta, image. detections: category, box, estimator (probability), meta
+                            # (for category person: distance, warning(bool) / for traffic_light: state (stop/walk,etc), estimator )
+        return response
+
+#########################################################################
 
 
 def main():
@@ -210,7 +233,8 @@ def main():
     quality = 80
     size = (480/1,640/1)
     rate = 100 #args.rate
-    speed = 0.33 #args.speed
+    speed = float(rospy.get_param('/skynet/speed', '0.33'))
+    print("INIT SPEED {}".format(speed))
 
     date = time.strftime("%d-%m-%y")
     bot_id = int(os.environ['KIWIBOT_ID'])
@@ -237,7 +261,7 @@ def main():
 
     bot = KiwiBot()
 
-    publisher = rospy.Publisher('capture/status', Status, queue_size=2)
+    publisher = rospy.Publisher('skynet/capture/status', Status, queue_size=2)
 
     msg = create_status_msg(size=size,quality=quality, device=device)
 
@@ -274,6 +298,12 @@ def main():
 
     videos = [video0, video1, video2]
 
+    ######### LOAD MODEL ######
+    print("Loading Model...")
+    model = init_model()
+    print("Model Loaded!")
+    # Publish that Network is ready!
+    skynet_pub.publish(True)
 
     time_counter = time.time()
     time_counter2 = time.time()
@@ -282,7 +312,9 @@ def main():
 
         loop_start = time.time()
 
+        speed = float(rospy.get_param('/skynet/speed', '0.33'))
         autonomous = rospy.get_param('/rover_teleop/mode') == "auto"
+
         ############# CAPTURING #########################
 
         if bot.capturing and not autonomous:
@@ -305,14 +337,14 @@ def main():
                writer.writerows(rows)
 
             fps = 1.0/(-start_time+time.time())
-            print("FPS: {}".format(fps))
+            # print("FPS: {}".format(fps))
 
             msg.recording = True
             msg.fps = fps
 
 
         else:
-            print("Not capturing")
+            # print("Not capturing")
             msg.fps = 0
             msg.recording = False
 
@@ -320,7 +352,13 @@ def main():
 
             response = client._ws_client.get_data()
 
-            auto_throttle = float(response.get("auto_throttle", speed))
+            local_time = int(time.time() * 1000)
+            # Logic to handle connection problems with local web interface
+            if local_time - client._ws_client.last_message >= 2000:
+                auto_throttle = float(response.get("auto_throttle", speed))
+            else:
+                auto_throttle = speed
+
             auto_steering = float(response.get("auto_steering", 1.0))
 
             desired_branch = response.get("network_branch", "")
@@ -329,10 +367,11 @@ def main():
 
             # Check autonomous to turn on Neural Net
             if autonomous:
-                _, img = videos[bot.center_camera_num].read()
+                _, image = videos[bot.center_camera_num].read()
 
-                if img is not None:
-                    img = img[...,::-1] #converts from BGR to RGB
+                if image is not None:
+                    image = cv2.flip(image,-1) #flips image (physical camera is set up upside down)
+                    img = image[...,::-1] #converts from BGR to RGB
                     img = utils.crop_image(img, params)
 
                     if model is None:
@@ -357,14 +396,17 @@ def main():
                         client._ws_client.emit(steering=steer_msg.turn)
                         client._steer_publisher.publish(steer_msg)
             else:
-                msg, img = test_capture(videos[bot.left_camera_num], videos[bot.center_camera_num], videos[bot.right_camera_num], msg)
+                msg, image = test_capture(videos[bot.left_camera_num], videos[bot.center_camera_num], videos[bot.right_camera_num], msg)
 
             # Send camera image to local front
             if send_camera:
                 if time.time()-time_counter >= 3 and img is not None:
                     _, buff = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
                     print("Sending image...")
-                    response = client._ws_client.emit(image=base64.b64encode(buff))
+                    client._ws_client.emit(image=base64.b64encode(buff))
+
+                    # detections = call_object_detection_api(UPLOAD_URL, buff)
+
                     time_counter = time.time()
             else:
                 time_counter = time.time()
@@ -392,7 +434,7 @@ def main():
 
         r.sleep()
         total_fps = 1/(time.time() - loop_start)
-        print("Total fps: {}".format(total_fps))
+        # print("Total fps: {}".format(total_fps))
 
 if __name__ == '__main__':
     try:
