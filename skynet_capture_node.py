@@ -233,7 +233,13 @@ def main():
     quality = 80
     size = (480/1,640/1)
     rate = 100 #args.rate
-    speed = float(rospy.get_param('/skynet/speed', '0.33'))
+
+    speed_default = '0.33'
+    speed = float(rospy.get_param('/skynet/speed', speed_default))
+    if speed == 0:
+        rospy.set_param('/skynet/speed', speed_default)
+        speed = float(rospy.get_param('/skynet/speed'))
+
     print("INIT SPEED {}".format(speed))
 
     date = time.strftime("%d-%m-%y")
@@ -312,7 +318,7 @@ def main():
 
         loop_start = time.time()
 
-        speed = float(rospy.get_param('/skynet/speed', '0.33'))
+        speed = float(rospy.get_param('/skynet/speed'))
         autonomous = rospy.get_param('/rover_teleop/mode') == "auto"
 
         ############# CAPTURING #########################
@@ -354,7 +360,7 @@ def main():
 
             local_time = int(time.time() * 1000)
             # Logic to handle connection problems with local web interface
-            if local_time - client._ws_client.last_message >= 2000:
+            if local_time - client._ws_client.last_message <= 2000:
                 auto_throttle = float(response.get("auto_throttle", speed))
             else:
                 auto_throttle = speed
