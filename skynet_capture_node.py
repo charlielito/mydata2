@@ -9,7 +9,7 @@ sys.path.append(os.path.join(dir_path, "pilot-net", "scripts"))
 os.environ["MODEL_PATH"] = os.path.join(dir_path, "pilot-net")
 os.environ["PARAMS_FOLDER"] = os.path.join(dir_path, "pilot-net")
 
-import utils
+import utils, pprint, re
 import time, random, cv2, math, subprocess, csv, binascii
 import tensorflow as tf
 import cytoolz as cz
@@ -112,6 +112,24 @@ class KiwiBot:
         self.throttle = 0.0
         self.capturing = False
 
+        # Handle physical connected video cameras
+        self.camera_numbers = find_cameras()
+        self.has_3cameras = len(self.camera_numbers) >= 3
+
+        if not has_3cameras:
+            if len(self.camera_numbers) == 0:
+                camera_mapping = [0,1,2]
+            elif len(self.camera_numbers) == 1:
+                camera_mapping = [self.camera_numbers[0]]*3
+            else: #if it has 2 cameras, map second in the middle
+                camera_mapping = [self.camera_numbers[0]]*3
+                camera_mapping[1] = self.camera_numbers[1]
+        else:
+            camera_mapping = self.camera_numbers[0:3]
+
+        self.video_capture_objects = map(cv2.VideoCapture, camera_mapping)
+
+
         self.left_camera_num = 0
         self.center_camera_num = 1
         self.right_camera_num = 2
@@ -197,14 +215,31 @@ def call_object_detection_api(UPLOAD_URL, image_buffer):
 
         r = requests.post(UPLOAD_URL, files = files, headers = headers)
 
-        print('Status code of the response: ')
-        print(r.status_code)
+        # print('Status code of the response: ')
+        # print(r.status_code)
 
         response = r.json() #returns a dicto: detections, meta, image. detections: category, box, estimator (probability), meta
                             # (for category person: distance, warning(bool) / for traffic_light: state (stop/walk,etc), estimator )
         return response
 
 #########################################################################
+
+
+
+########## NEW Check Video Devices ##################
+
+def find_cameras():
+    p = re.compile(r".+video(?P<video>\d+)$", re.I)
+    devices = subprocess.check_output("ls -l /dev", shell=True)
+    avail_cameras = []
+    for device in devices.split('\n'):
+        if device:
+            info = p.match(device)
+            if info:
+                dinfo = info.groupdict()
+                avail_cameras.append(dinfo["video"])
+    return map(int,avail_cameras)
+
 
 
 def main():
@@ -234,11 +269,7 @@ def main():
     size = (480/1,640/1)
     rate = 100 #args.rate
 
-    speed_default = '0.33'
-    speed = float(rospy.get_param('/skynet/speed', speed_default))
-    if speed == 0:
-        rospy.set_param('/skynet/speed', speed_default)
-        speed = float(rospy.get_param('/skynet/speed'))
+    speed = float(rospy.get_param('/skynet/speed', 0.33))
 
     print("INIT SPEED {}".format(speed))
 
@@ -271,14 +302,15 @@ def main():
 
     msg = create_status_msg(size=size,quality=quality, device=device)
 
-    video0 = cv2.VideoCapture(0)
-    video1 = cv2.VideoCapture(1)
-    video2 = cv2.VideoCapture(2)
+
+    has_3cameras = bot.has_3cameras
+    videos = bot.video_capture_objects
+
 
     def fn():
-        video0.release()
-        video1.release()
-        video2.release()
+        videos[0].release()
+        videos[1].release()
+        videos[2].release()
         msg = create_status_msg()
         publisher.publish(msg)
         skynet_pub.publish(False)
@@ -302,8 +334,6 @@ def main():
             row = ['bot_id', 'timestamp', 'filename', 'camera', 'throttle', 'steering']
             writer.writerow(row)
 
-    videos = [video0, video1, video2]
-
     ######### LOAD MODEL ######
     print("Loading Model...")
     model = init_model()
@@ -323,7 +353,7 @@ def main():
 
         ############# CAPTURING #########################
 
-        if bot.capturing and not autonomous:
+        if bot.capturing and not autonomous and has_3cameras:
 
             start_time = time.time()
 
@@ -393,7 +423,7 @@ def main():
                         predictions = model.predict(image=[img])
                         inference_time = time.time() - start_inference
 
-                        print("Inference time: {}".format(inference_time))
+                        # print("Inference time: {}".format(inference_time))
 
                         steer_msg.speed = auto_throttle
                         steer_msg.turn = predictions[0,0]*auto_steering
@@ -412,6 +442,8 @@ def main():
                     client._ws_client.emit(image=base64.b64encode(buff))
 
                     # detections = call_object_detection_api(UPLOAD_URL, buff)
+                    # pp = pprint.PrettyPrinter(indent=2)
+                    # pp.pprint(detections)
 
                     time_counter = time.time()
             else:
