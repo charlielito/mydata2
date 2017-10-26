@@ -316,9 +316,7 @@ def main():
         skynet_pub.publish(False)
 
 
-    set_video_size(video0, size)
-    set_video_size(video1, size)
-    set_video_size(video2, size)
+    map(lambda video: set_video_size(video, size), videos)
 
     rospy.on_shutdown(fn)
 
@@ -479,9 +477,9 @@ if __name__ == '__main__':
         main()
     except rospy.ROSInterruptException:
         pass
-    except:
-        system_info = sys.exc_info()
-        pub = rospy.Publisher('web_client/message', String, queue_size=2)
-        time.sleep(1)
-        pub.publish(str(system_info))
-        rospy.loginfo(system_info)
+    # except:
+    #     system_info = sys.exc_info()
+    #     pub = rospy.Publisher('web_client/message', String, queue_size=2)
+    #     time.sleep(1)
+    #     pub.publish(str(system_info))
+    #     rospy.loginfo(system_info)
