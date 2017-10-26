@@ -119,15 +119,21 @@ class KiwiBot:
         if not self.has_3cameras:
             if len(self.camera_numbers) == 0:
                 camera_mapping = [0,1,2]
-            elif len(self.camera_numbers) == 1:
-                camera_mapping = [self.camera_numbers[0]]*3
-            else: #if it has 2 cameras, map second in the middle
-                camera_mapping = [self.camera_numbers[0]]*3
-                camera_mapping[1] = self.camera_numbers[1]
-        else:
-            camera_mapping = self.camera_numbers[0:3]
+                self.video_capture_objects = map(cv2.VideoCapture, camera_mapping)
 
-        self.video_capture_objects = map(cv2.VideoCapture, camera_mapping)
+            elif len(self.camera_numbers) == 1: #just center camera matters
+                video_object = cv2.VideoCapture(self.camera_numbers[0])
+                self.video_capture_objects = [video_object, video_object, video_object]
+
+            else: #only 2 cameras
+                video_object = map(cv2.VideoCapture, self.camera_numbers)
+                self.video_capture_objects = [video_object[0], video_object[1], video_object[0]]
+
+        else: #take 3 first registered cameras
+            camera_mapping = self.camera_numbers[0:3]
+            self.video_capture_objects = map(cv2.VideoCapture, camera_mapping)
+
+
 
 
         self.left_camera_num = 0
