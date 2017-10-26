@@ -116,7 +116,7 @@ class KiwiBot:
         self.camera_numbers = find_cameras()
         self.has_3cameras = len(self.camera_numbers) >= 3
 
-        if not has_3cameras:
+        if not self.has_3cameras:
             if len(self.camera_numbers) == 0:
                 camera_mapping = [0,1,2]
             elif len(self.camera_numbers) == 1:
