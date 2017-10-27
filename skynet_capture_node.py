@@ -32,6 +32,8 @@ from mavros_msgs.msg import ActuatorControl
 #### CAPTURE ####################################
 from skynet.msg import Status
 from web_client.msg import Control as WebControl
+from os import listdir
+
 
 ####### CAPTURE ############################
 def set_video_size(video, size):
@@ -166,7 +168,10 @@ def checkout_download_model(dir_path, branch):
 
     os.chdir(dir_path)
     process = subprocess.check_call("git checkout " + branch, shell=True, stdout=subprocess.PIPE)
-    process = subprocess.check_call(os.path.join(dir_path,"floyd","download-model"), shell=True, stdout=subprocess.PIPE)
+    model_name = branch.split("/")[-1] #it assumes that the name of the branch is something feature/*****
+    if not exists_model(model_name, os.path.join(dir_path,"models")):
+        print("Downloading model from floyd...")
+        process = subprocess.check_call(os.path.join(dir_path,"floyd","download-model"), shell=True, stdout=subprocess.PIPE)
 
 
 def init_model():
@@ -266,6 +271,23 @@ def find_cameras():
                 dinfo = info.groupdict()
                 avail_cameras.append(dinfo["video"])
     return map(int,avail_cameras)
+
+###### Check existance of models
+def exists_model(model_name, models_dir):
+    p = re.compile(model_name+r".+$", re.I)
+    models = listdir(models_dir)
+
+    files = 0
+    for model in models:
+        # print model
+        info = p.match(model)
+        if info:
+            files+=1
+
+    if files == 3: #3 files representing 1 tensorflow model
+        return True
+    else:
+        return False
 
 
 
