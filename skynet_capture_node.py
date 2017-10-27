@@ -232,6 +232,27 @@ def call_object_detection_api(UPLOAD_URL, image_buffer):
 
 
 
+################################# Data capture ###########################
+# Create data.csv headers if it not exists
+# Create folder for capturing data
+
+def create_folder_csv_4data_capture(dest_folder):
+
+    if os.path.exists(dest_folder):
+        print('Folder for datacapture exists')
+    else:
+        print('Folder for datacapture does not exist')
+        os.mkdir(dest_folder)
+
+    csv_file = os.path.join(dest_folder,'data.csv')
+
+    if not os.path.isfile(csv_file):
+        with open(csv_file, 'a') as fd:
+            writer = csv.writer(fd)
+            row = ['bot_id', 'timestamp', 'filename', 'camera', 'throttle', 'steering']
+            writer.writerow(row)
+
+
 ########## NEW Check Video Devices ##################
 
 def find_cameras():
@@ -286,15 +307,6 @@ def main():
     dest = os.path.join(device,'kiwibot'+str(bot_id)+'-'+date)
     #dest = "/home/pi/data"
 
-    ### Create folder for capturing data
-    if os.path.exists(dest):
-        print('exists')
-
-    else:
-        print('does not')
-        os.mkdir(dest)
-
-
     client = WsSkynetClient()
     r = rospy.Rate(rate)
 
@@ -312,6 +324,8 @@ def main():
     has_3cameras = bot.has_3cameras
     videos = bot.video_capture_objects
 
+    info_msg = "Only {} cameras are recognized!! Check connections!".format(len(bot.camera_numbers))
+    info_web_pub = rospy.Publisher('web_client/message', String, queue_size=2)
 
     def fn():
         videos[0].release()
@@ -330,13 +344,8 @@ def main():
 
 
     ###### Create data.csv headers if it not exists
-    csv_file = os.path.join(dest,'data.csv')
+    create_folder_csv_4data_capture(dest)
 
-    if not os.path.isfile(csv_file):
-        with open(csv_file, 'a') as fd:
-            writer = csv.writer(fd)
-            row = ['bot_id', 'timestamp', 'filename', 'camera', 'throttle', 'steering']
-            writer.writerow(row)
 
     ######### LOAD MODEL ######
     print("Loading Model...")
@@ -344,6 +353,11 @@ def main():
     print("Model Loaded!")
     # Publish that Network is ready!
     skynet_pub.publish(True)
+
+    if not has_3cameras: #if not 3 cameras, report it to users
+        info_web_pub.publish(info_msg)
+        client._ws_client.emit(info=info_msg)
+
 
     time_counter = time.time()
     time_counter2 = time.time()
@@ -456,8 +470,8 @@ def main():
             ### Change of Neural Net
             if "network_branch" in response:
                 try:
-                    skynet_pub.publish(False)
                     checkout_download_model(os.path.join(dir_path,"pilot-net"),desired_branch)
+                    skynet_pub.publish(False)
                     rospy.signal_shutdown("Changing AI")
                 except Exception as e:
                     print(e)
@@ -483,9 +497,9 @@ if __name__ == '__main__':
         main()
     except rospy.ROSInterruptException:
         pass
-    # except:
-    #     system_info = sys.exc_info()
-    #     pub = rospy.Publisher('web_client/message', String, queue_size=2)
-    #     time.sleep(1)
-    #     pub.publish(str(system_info))
-    #     rospy.loginfo(system_info)
+    except:
+        system_info = sys.exc_info()
+        pub = rospy.Publisher('web_client/message', String, queue_size=2)
+        time.sleep(1)
+        pub.publish(str(system_info))
+        rospy.loginfo(system_info)
