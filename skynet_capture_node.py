@@ -33,6 +33,8 @@ from mavros_msgs.msg import ActuatorControl
 from skynet.msg import Status
 from web_client.msg import Control as WebControl
 from os import listdir
+from threading import Thread
+
 
 
 ####### CAPTURE ############################
@@ -135,9 +137,6 @@ class KiwiBot:
             camera_mapping = self.camera_numbers[0:3]
             self.video_capture_objects = map(cv2.VideoCapture, camera_mapping)
 
-
-
-
         self.left_camera_num = 0
         self.center_camera_num = 1
         self.right_camera_num = 2
@@ -217,11 +216,12 @@ UPLOAD_URL = 'http://vision.kiwicampus.com/api/v2/upload/'
 '''
 UPLOAD_URL: host of api
 image_buffer: jpg buffer array of image
+kiwi_id: bot id in STRING format
 returns: dictionary of bounding boxes and detections
 '''
-def call_object_detection_api(UPLOAD_URL, image_buffer):
+def call_object_detection_api(UPLOAD_URL, image_buffer, kiwi_id):
 
-        headers = {'Accept': 'application/json'}
+        headers = {'Accept': 'application/json', 'kiwibot-id': kiwi_id}
         files = {'file': image_buffer.tostring()  }
 
         r = requests.post(UPLOAD_URL, files = files, headers = headers)
@@ -232,6 +232,19 @@ def call_object_detection_api(UPLOAD_URL, image_buffer):
         response = r.json() #returns a dicto: detections, meta, image. detections: category, box, estimator (probability), meta
                             # (for category person: distance, warning(bool) / for traffic_light: state (stop/walk,etc), estimator )
         return response
+
+
+def api_call_fn(run_event, bot_id, period_time):
+	global IMAGE, DETECTIONS, SEND_CAMERA
+	while run_event.is_set():
+        if SEND_CAMERA:
+            print("Calling OBJ detect API")
+            init_time = time.time()
+            DETECTIONS = call_object_detection_api(UPLOAD_URL, IMAGE, bot_id)
+            time.sleep(period_time - (time.time()-init_time) ) # sleeps to complete the period_time
+        else:
+            time.sleep(1)
+
 
 #########################################################################
 
@@ -349,6 +362,17 @@ def main():
     info_msg = "Only {} cameras are recognized!! Check connections!".format(len(bot.camera_numbers))
     info_web_pub = rospy.Publisher('web_client/message', String, queue_size=2)
 
+
+    ### Init Thread to send images to OBJ detection API
+    IMAGE, DETECTIONS, SEND_CAMERA = None, {}, False #initialize global variables
+    run_event = threading.Event()
+    run_event.set()
+    object_api_thread = Thread(target=api_call_fn, args=(run_event,bot_id,3))
+    object_api_thread.start()
+    object_api_thread.daemon = True
+
+
+
     def fn():
         videos[0].release()
         videos[1].release()
@@ -356,6 +380,8 @@ def main():
         msg = create_status_msg()
         publisher.publish(msg)
         skynet_pub.publish(False)
+        run_event.clear()
+        object_api_thread.join()
 
 
     map(lambda video: set_video_size(video, size), videos)
@@ -478,25 +504,28 @@ def main():
             if send_camera:
                 if time.time()-time_counter >= 3 and image is not None:
                     _, buff = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                    IMAGE = buff
+                    SEND_CAMERA = True
                     print("Sending image...")
                     client._ws_client.emit(image=base64.b64encode(buff))
 
-                    # detections = call_object_detection_api(UPLOAD_URL, buff)
-                    # pp = pprint.PrettyPrinter(indent=2)
-                    # pp.pprint(detections)
+                    pp = pprint.PrettyPrinter(indent=2)
+                    pp.pprint(DETECTIONS)
 
                     time_counter = time.time()
             else:
                 time_counter = time.time()
+                SEND_CAMERA = False
 
             ### Change of Neural Net
             if "network_branch" in response:
                 try:
-                    checkout_download_model(os.path.join(dir_path,"pilot-net"),desired_branch)
                     skynet_pub.publish(False)
+                    checkout_download_model(os.path.join(dir_path,"pilot-net"),desired_branch)
                     rospy.signal_shutdown("Changing AI")
                 except Exception as e:
                     print(e)
+                    skynet_pub.publish(True) #if it fails report skynet node still alive
             ########################################################################################
 
 
