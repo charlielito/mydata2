@@ -33,7 +33,7 @@ from mavros_msgs.msg import ActuatorControl
 from skynet.msg import Status
 from web_client.msg import Control as WebControl
 from os import listdir
-from threading import Thread
+from threading import Thread, Event
 
 
 
