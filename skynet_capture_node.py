@@ -235,8 +235,8 @@ def call_object_detection_api(UPLOAD_URL, image_buffer, kiwi_id):
 
 
 def api_call_fn(run_event, bot_id, period_time):
-	global IMAGE, DETECTIONS, SEND_CAMERA
-	while run_event.is_set():
+    global IMAGE, DETECTIONS, SEND_CAMERA
+    while run_event.is_set():
         if SEND_CAMERA:
             print("Calling OBJ detect API")
             init_time = time.time()
@@ -244,7 +244,6 @@ def api_call_fn(run_event, bot_id, period_time):
             time.sleep(period_time - (time.time()-init_time) ) # sleeps to complete the period_time
         else:
             time.sleep(1)
-
 
 #########################################################################
 
