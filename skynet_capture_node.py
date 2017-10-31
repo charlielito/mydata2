@@ -235,11 +235,10 @@ def call_object_detection_api(UPLOAD_URL, image_buffer, kiwi_id):
 
 
 class ObjApiHandler(Thread):
-    def __init__(self, upload_url, bot_id, ws_client, period_secs = 3, quality = 80):
+    def __init__(self, upload_url, bot_id, period_secs = 3, quality = 80):
         super(ObjApiHandler,self).__init__()
         self._upload_url = upload_url
         self._bot_id = bot_id
-        self._ws_client = ws_client
         self._period_secs = period_secs
         self._quality = quality
 
@@ -248,20 +247,21 @@ class ObjApiHandler(Thread):
 
         self.image = None
         self.detections = {}
-        self.send_camera = False
+        self.call_api = False
 
     def run(self):
 
         while self.run_event.is_set():
 
-            if self.send_camera :
+            if self.call_api:
                 try:
                     print("Calling OBJ detect API")
                     init_time = time.time()
                     _, buff = cv2.imencode(".jpg", self.image, [cv2.IMWRITE_JPEG_QUALITY, self._quality])
-                    self._ws_client.emit(image=base64.b64encode(buff))
                     self.detections = call_object_detection_api(self._upload_url, buff, str(self._bot_id ))
-                    time.sleep(self._period_secs - (time.time()-init_time) ) # sleeps to complete the period_secs
+                    time2wait = self._period_secs - (time.time()-init_time)
+                    if time2wait > 0:
+                        time.sleep(time2wait) # sleeps to complete the period_secs
                 except Exception as e:
                     print(e)
                     print("Object API failed")
@@ -388,7 +388,7 @@ def main():
 
 
     ### Init Thread to send images to OBJ detection API
-    obj_api = ObjApiHandler(UPLOAD_URL, bot_id, client._ws_client, period_secs = 3, quality = quality)
+    obj_api = ObjApiHandler(UPLOAD_URL, bot_id, period_secs = 1, quality = quality)
     obj_api.daemon = True
     obj_api.start()
 
@@ -488,6 +488,9 @@ def main():
 
             send_camera = response.get("send_camera", "false") == "true"
 
+            call_object_api = response.get("send_camera", "false") == "true"
+
+
             # Check autonomous to turn on Neural Net
             if autonomous:
                 _, image = videos[bot.center_camera_num].read()
@@ -523,21 +526,22 @@ def main():
 
             # Send camera image to local front
             if send_camera:
-                if image is not None:
-                    obj_api.image = image
-                    obj_api.send_camera = True
                 if time.time()-time_counter >= 3 and image is not None:
-                    # _, buff = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, quality])
-                    # print("Sending image...")
-                    # client._ws_client.emit(image=base64.b64encode(buff))
-
-                    # pp = pprint.PrettyPrinter(indent=2)
-                    # pp.pprint(DETECTIONS)
-
+                    _, buff = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                    print("Sending image to local interface...")
+                    client._ws_client.emit(image=base64.b64encode(buff))
                     time_counter = time.time()
             else:
                 time_counter = time.time()
-                obj_api.send_camera = False
+
+            ### Enable Objectdetection API
+            if call_object_api and image is not None:
+                obj_api.image = image
+                obj_api.call_api = True
+                # pp = pprint.PrettyPrinter(indent=2)
+                # pp.pprint(obj_api.detections)
+            else:
+                obj_api.call_api = False
 
             ### Change of Neural Net
             if "network_branch" in response:
