@@ -259,8 +259,9 @@ class ObjApiHandler(Thread):
                     print("Calling OBJ detect API")
                     init_time = time.time()
                     _, buff = cv2.imencode(".jpg", self.image, [cv2.IMWRITE_JPEG_QUALITY, self._quality])
+                    self._ws_client.emit(image=base64.b64encode(buff))
                     self.detections = call_object_detection_api(self._upload_url, buff, str(self._bot_id ))
-                    time.sleep(period_secs - (time.time()-init_time) ) # sleeps to complete the period_secs
+                    time.sleep(self._period_secs - (time.time()-init_time) ) # sleeps to complete the period_secs
                 except Exception as e:
                     print(e)
                     print("Object API failed")
@@ -387,7 +388,7 @@ def main():
 
 
     ### Init Thread to send images to OBJ detection API
-    obj_api = ObjApiHandler(UPLOAD_URL, bot_id, client, period_secs = 3, quality = quality)
+    obj_api = ObjApiHandler(UPLOAD_URL, bot_id, client._ws_client, period_secs = 3, quality = quality)
     obj_api.daemon = True
     obj_api.start()
 
