@@ -269,6 +269,17 @@ class ObjApiHandler(Thread):
             else:
                 time.sleep(0.5)
 
+def any_warning(detections):
+    warnings = []
+    if len(detections) !=0 :
+        objs = detections['detections']
+        for obj in objs:
+            if "meta" in obj:
+                warnings.append((obj['meta']['warning']))
+        return any(warnings)
+    else:
+        return False
+
 
 #########################################################################
 
@@ -540,6 +551,10 @@ def main():
                 obj_api.call_api = True
                 # pp = pprint.PrettyPrinter(indent=2)
                 # pp.pprint(obj_api.detections)
+
+                warning = any_warning(obj_api.detections)
+                print(warning)
+                client._ws_client.emit(warning = warning)
             else:
                 obj_api.call_api = False
 
